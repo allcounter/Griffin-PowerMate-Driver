@@ -25,8 +25,8 @@ import PowerMateDriver
 
 // MARK: - Self-test verbs
 
-// Handled before anything else so `--selftest-hold` / `--selftest-decode` never seize the HID
-// device or build a status item; returns immediately for a normal launch.
+// Handled before anything else so a `--selftest-*` verb never seizes the HID device or builds
+// a status item; returns immediately for a normal launch.
 runSelfTestIfRequested()
 
 // MARK: - Driver
