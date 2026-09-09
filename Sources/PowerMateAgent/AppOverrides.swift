@@ -84,13 +84,29 @@ func frontmostBundleID() -> String? {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
 
+/// Resolves an override against the base, inheriting `holdKey` and `pressTurnOncePerPress`
+/// from the base unconditionally.
+///
+/// Neither field has a per-app control in `AppOverridesWindow.swift` yet, so an override can
+/// only ever carry the zero value for them and there is nothing per-app worth preserving —
+/// silently keeping the override's zero value would make a per-app override quietly kill the
+/// hold key and the flick setting instead of inheriting them. When such a control is added,
+/// these should become nil-fallbacks (take from base only where the override has not set them)
+/// rather than unconditional assignments.
+func resolvedSettings(override: AppSettings?, base: AppSettings) -> AppSettings {
+    guard let override = override else { return base }
+    var resolved = override
+    resolved.holdKey = base.holdKey
+    resolved.pressTurnOncePerPress = base.pressTurnOncePerPress
+    return resolved
+}
+
 /// The effective settings for whatever app is currently frontmost: its override if one is
-/// configured, otherwise the global default.
+/// configured, otherwise the global default. The hold key and the once-per-press flick are
+/// always inherited from the default, since neither is per-app configurable yet.
 func currentSettings() -> AppSettings {
-    guard let bundleID = frontmostBundleID(), let override = perAppSettings[bundleID] else {
-        return defaultSettings
-    }
-    return override
+    guard let bundleID = frontmostBundleID() else { return defaultSettings }
+    return resolvedSettings(override: perAppSettings[bundleID], base: defaultSettings)
 }
 
 /// Mutates whichever settings are currently in effect for the frontmost app — its per-app

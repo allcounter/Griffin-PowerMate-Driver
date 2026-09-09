@@ -4,15 +4,18 @@ import ApplicationServices
 
 // MARK: - Headless self-tests
 //
-// Two verbs that exercise the hold-key primitives without a PowerMate attached and without
+// Three verbs that exercise the hold-key primitives without a PowerMate attached and without
 // starting the agent proper. They run before the driver seizes the device or the status item
 // is built, so they work while the normally-installed agent is quit but everything else about
 // the machine (the stored settings blob, the Accessibility grant) is untouched.
 //
 //   PowerMateAgent --selftest-hold <seconds>   press the configured hold key, wait, release
 //   PowerMateAgent --selftest-decode           decode the live settings blob and report holdKey
+//   PowerMateAgent --selftest-overrides        resolve a per-app override against the default
+//                                               and check that holdKey/pressTurnOncePerPress
+//                                               are inherited
 //
-// Both print what they did and exit 0; anything else returns and startup continues as usual.
+// All three print what they did and exit 0; anything else returns and startup continues as usual.
 
 /// Runs a `--selftest-*` verb if one was passed and exits the process. Returns normally when
 /// the agent was launched without one.
@@ -24,6 +27,8 @@ func runSelfTestIfRequested() {
         runHoldSelfTest(seconds: args.dropFirst().first.flatMap(Double.init) ?? 5)
     case "--selftest-decode":
         runDecodeSelfTest()
+    case "--selftest-overrides":
+        runOverridesSelfTest()
     default:
         return
     }
@@ -71,6 +76,58 @@ private func runDecodeSelfTest() {
         print("selftest-decode:   keypressBindings  = \(decoded.keypressBindings.count) directions")
     } catch {
         print("selftest-decode: FAILED — \(error)")
+        exit(1)
+    }
+}
+
+private func runOverridesSelfTest() {
+    // Constructed entirely in memory — no `defaults` or `NSWorkspace` reads. That's the point
+    // of extracting resolvedSettings(override:base:) as a pure function: this verb can prove
+    // the inheritance rule from a bare `swift build` binary, where --selftest-decode and
+    // --selftest-hold legitimately cannot (they depend on the installed app's UserDefaults
+    // domain).
+    var base = AppSettings()
+    base.holdKey = KeyBinding(keyCode: 0x3F, label: "Fn")
+    base.pressTurnOncePerPress = true
+    base.mode = .scroll
+
+    var override = AppSettings()
+    override.mode = .keypress
+
+    var anyFailed = false
+
+    func check(_ name: String, _ actual: Bool, expected: String, actualDescription: String) {
+        if actual {
+            print("selftest-overrides: PASS \(name) — expected \(expected), got \(actualDescription)")
+        } else {
+            print("selftest-overrides: FAIL \(name) — expected \(expected), got \(actualDescription)")
+            anyFailed = true
+        }
+    }
+
+    // Test 1: a bare AppSettings() override resolved against a base with a hold key and
+    // pressTurnOncePerPress == true comes back carrying BOTH of the base's values.
+    let resolved1 = resolvedSettings(override: override, base: base)
+    check("inherited holdKey", resolved1.holdKey == base.holdKey,
+          expected: "\(String(describing: base.holdKey))", actualDescription: "\(String(describing: resolved1.holdKey))")
+    check("inherited pressTurnOncePerPress", resolved1.pressTurnOncePerPress == base.pressTurnOncePerPress,
+          expected: "\(base.pressTurnOncePerPress)", actualDescription: "\(resolved1.pressTurnOncePerPress)")
+
+    // Test 2: a field the override genuinely owns (mode) is still respected — the base must
+    // not clobber it.
+    check("override-owned mode preserved", resolved1.mode == .keypress,
+          expected: ".keypress", actualDescription: "\(resolved1.mode)")
+
+    // Test 3: a nil override returns the base unchanged.
+    let resolved2 = resolvedSettings(override: nil, base: base)
+    check("nil override -> base.mode", resolved2.mode == base.mode,
+          expected: "\(base.mode)", actualDescription: "\(resolved2.mode)")
+    check("nil override -> base.holdKey", resolved2.holdKey == base.holdKey,
+          expected: "\(String(describing: base.holdKey))", actualDescription: "\(String(describing: resolved2.holdKey))")
+    check("nil override -> base.pressTurnOncePerPress", resolved2.pressTurnOncePerPress == base.pressTurnOncePerPress,
+          expected: "\(base.pressTurnOncePerPress)", actualDescription: "\(resolved2.pressTurnOncePerPress)")
+
+    if anyFailed {
         exit(1)
     }
 }
