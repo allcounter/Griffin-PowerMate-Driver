@@ -255,10 +255,11 @@ final class MenuHandler: NSObject, NSMenuDelegate {
             ("Prefer Fine volume in audio mode", " – Swap normal and fine volume steps in audio mode."),
             ("Reverse scroll direction", " – Reverses the scroll direction in scroll mode."),
             ("Prefer Fine scrolling", " – Scroll by single-pixel increments instead of the default coarse step for precise control."),
-            ("Keypress mode", " – Turning sends a configured keystroke instead of scrolling (disables Audio mode). Configure the keys, including Shift/Option/Command/Press variants, via \"Configure Keypress Mode...\".\n"),
+            ("Keypress mode", " – Turning sends a configured keystroke instead of scrolling (disables Audio mode). Configure the keys, including Shift/Option/Command/Press variants, via \"Configure Keypress Mode...\"."),
+            ("Press + Turn Fires Once Per Press", " – Turns Press + Turn into a flick: hold the button, one nudge left or right, release, one keypress — instead of repeating per detent. Applies wherever Press + Turn sends a key: in Keypress mode, or in any mode once a hold key is set. Useful for toggling something such as a quick-note window, which repeating would undo.\n"),
             ("Click / Double-click", " – Set what the button does on a click or double-click: Left-click, Right-click, Mute/Unmute, Play/Pause, or a Custom Keypress you record. Applies the same in every mode. Double-click defaults to None (no detection delay added to clicks) until you configure one. For Mute/Unmute or Play/Pause, hold Shift to use the other action."),
             ("Long press", " – Right-click, left-click, double-click, toggle between two modes (Audio/Scroll, Audio/Keypress, or Scroll/Keypress), toggle fine/coarse scrolling, run a script, or a Custom Keypress. Configurable per app in \"Configure Applications...\"."),
-            ("Hold key", " – Holds a single key down for exactly as long as the PowerMate button is held, for push-to-talk dictation and anything else that reacts to a key being held. A bare modifier such as Fn can be recorded. A short tap still performs the Click action (and a double-click its action, if one is set); the key engages once the button has been held for 0.2 s. With Click and Double-click both None it engages immediately. Long press does nothing while a hold key is set. Press + Turn sends the Keypress-mode \"Press + Turn\" key in every mode (instead of skipping tracks) and cancels the hold, so you can step through just-dictated text. \"Press + Turn Fires Once Per Press\" turns it into a flick: hold, nudge left or right, release, one keypress, e.g. to toggle a quick-note window.\n"),
+            ("Hold key", " – Holds a single key down for exactly as long as the PowerMate button is held, for push-to-talk dictation and anything else that reacts to a key being held. A bare modifier such as Fn can be recorded. A short tap still performs the Click action (and a double-click its action, if one is set); the key engages once the button has been held for 0.2 s. With Click and Double-click both None it engages immediately. Long press does nothing while a hold key is set. Press + Turn sends the Keypress-mode \"Press + Turn\" key in every mode (instead of skipping tracks) and cancels the hold, so you can step through just-dictated text.\n"),
             ("Modifiers:", ""),
             ("Fn + turn", " – Momentarily toggle between scroll and audio mode."),
             ("Shift + turn (audio mode)", " – Fine volume step (like Shift+Option+Volume keys)."),
@@ -392,6 +393,11 @@ func buildMenu() {
     let configKeypressItem = NSMenuItem(title: "Configure Keypress Mode...", action: #selector(MenuHandler.configureKeypressMode), keyEquivalent: "")
     configKeypressItem.target = menuHandler
     menu.addItem(configKeypressItem)
+
+    let pressTurnOnceItem = NSMenuItem(title: "Press + Turn Fires Once Per Press", action: #selector(MenuHandler.togglePressTurnOncePerPress), keyEquivalent: "")
+    pressTurnOnceItem.target = menuHandler
+    menuHandler.pressTurnOnceItem = pressTurnOnceItem
+    menu.addItem(pressTurnOnceItem)
 
     menu.addItem(NSMenuItem.separator())
 
@@ -529,11 +535,6 @@ func buildMenu() {
     holdKeyCaptureItem.target = menuHandler
     menuHandler.holdKeyCaptureItem = holdKeyCaptureItem
     holdKeyMenu.addItem(holdKeyCaptureItem)
-    holdKeyMenu.addItem(NSMenuItem.separator())
-    let pressTurnOnceItem = NSMenuItem(title: "Press + Turn Fires Once Per Press", action: #selector(MenuHandler.togglePressTurnOncePerPress), keyEquivalent: "")
-    pressTurnOnceItem.target = menuHandler
-    menuHandler.pressTurnOnceItem = pressTurnOnceItem
-    holdKeyMenu.addItem(pressTurnOnceItem)
     let holdKeySub = NSMenuItem(title: "Hold key", action: nil, keyEquivalent: "")
     holdKeySub.submenu = holdKeyMenu
     menu.addItem(holdKeySub)
