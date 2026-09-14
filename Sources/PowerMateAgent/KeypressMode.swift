@@ -32,38 +32,22 @@ struct KeyBinding: Codable, Equatable {
     var label: String
     // CGEventFlags.rawValue; stored as a plain UInt64 since CGEventFlags itself isn't Codable.
     var modifierFlags: UInt64
-    // NX_KEYTYPE_* (see AudioControl.swift's postMediaKey) for a binding recorded from a
-    // hardware media/function key — volume, brightness, mute, play/pause, and the like. These
-    // arrive as .systemDefined events, never .keyDown, so keyCode/modifierFlags are meaningless
-    // for them and are left at their zero value. nil for every ordinary keyboard binding.
-    var mediaKeyType: Int32?
 
     var flags: CGEventFlags { CGEventFlags(rawValue: modifierFlags) }
-    var isMediaKey: Bool { mediaKeyType != nil }
 
     init(keyCode: CGKeyCode, label: String, modifierFlags: UInt64 = 0) {
         self.keyCode = keyCode
         self.label = label
         self.modifierFlags = modifierFlags
-        self.mediaKeyType = nil
     }
 
-    init(mediaKeyType: Int32, label: String) {
-        self.keyCode = 0
-        self.label = label
-        self.modifierFlags = 0
-        self.mediaKeyType = mediaKeyType
-    }
-
-    // Custom decoding so bindings saved before modifier capture (or media-key capture) existed
-    // still load, defaulting to no modifiers / not-a-media-key instead of failing to decode
-    // entirely.
+    // Custom decoding so bindings saved before modifier capture existed (no "modifierFlags"
+    // key) still load, defaulting to no modifiers instead of failing to decode entirely.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         keyCode = try container.decode(CGKeyCode.self, forKey: .keyCode)
         label = try container.decode(String.self, forKey: .label)
         modifierFlags = try container.decodeIfPresent(UInt64.self, forKey: .modifierFlags) ?? 0
-        mediaKeyType = try container.decodeIfPresent(Int32.self, forKey: .mediaKeyType)
     }
 }
 
@@ -259,38 +243,6 @@ private let modifierOnlyKeys: [CGKeyCode: (flag: NSEvent.ModifierFlags, label: S
     0x3F: (.function, "Fn"),
 ]
 
-// MARK: - Media/function key capture
-//
-// The fn-row's special icons (volume, brightness, mute, play/pause...) never generate
-// .keyDown — the driver reports them as .systemDefined events (subtype 8, "aux control
-// button") carrying an NX_KEYTYPE_* code in data1 instead. See postMediaKey in
-// AudioControl.swift, which already posts this same event shape for track-skip/volume.
-
-/// Friendly labels for the NX_KEYTYPE_* codes most likely to be recorded here. Not
-/// exhaustive — an unrecognized code (e.g. a vendor-specific keyboard key) still captures
-/// and posts correctly, just labeled generically by `mediaKeyLabel(for:)` below.
-private let namedMediaKeyLabels: [Int32: String] = [
-    0: "Volume Up", 1: "Volume Down", 7: "Mute",
-    2: "Brightness Up", 3: "Brightness Down",
-    16: "Play/Pause", 17: "Next", 18: "Previous", 19: "Fast Forward", 20: "Rewind",
-    21: "Keyboard Brightness Up", 22: "Keyboard Brightness Down",
-]
-
-func mediaKeyLabel(for keyType: Int32) -> String {
-    namedMediaKeyLabels[keyType] ?? "Media Key \(keyType)"
-}
-
-/// Decodes an aux-control-button `.systemDefined` event into (NX_KEYTYPE code, isKeyDown),
-/// or nil if this isn't one (macOS uses other systemDefined subtypes for unrelated things,
-/// e.g. Spaces changes).
-private func decodeMediaKeyEvent(_ event: NSEvent) -> (keyType: Int32, isKeyDown: Bool)? {
-    guard event.type == .systemDefined, event.subtype.rawValue == 8 else { return nil }
-    let data1 = event.data1
-    let keyType = Int32((data1 & 0xFFFF0000) >> 16)
-    let keyState = (data1 & 0xFF00) >> 8
-    return (keyType, keyState == 0x0A)
-}
-
 // MARK: - Key capture control
 
 /// A push button that, when clicked, records the next key pressed anywhere in the app and
@@ -307,13 +259,6 @@ final class KeyCaptureButton: NSButton {
     /// Keypress-mode grid and the Custom Keypress dialog, where a modifier on its own isn't a
     /// keystroke anything would act on; on for the hold key, whose whole point is holding one.
     var capturesModifiersAlone = false
-
-    /// Whether a hardware media/function key (volume, brightness, mute, play/pause, ...) counts
-    /// as a recordable key. Off everywhere except the hold key, the only binding that can
-    /// currently be posted as one of these (see postBindingDown/postBindingUp in
-    /// EventPosting.swift) — Keypress mode and Custom Keypress only know how to post an
-    /// ordinary keyCode.
-    var capturesMediaKeys = false
 
     private var monitor: Any?
 
@@ -336,19 +281,9 @@ final class KeyCaptureButton: NSButton {
         KeyCaptureButton.activeCapture?.cancelCapture()
         KeyCaptureButton.activeCapture = self
         title = "Press a key…"
-        var mask: NSEvent.EventTypeMask = capturesModifiersAlone ? [.keyDown, .flagsChanged] : [.keyDown]
-        if capturesMediaKeys { mask.insert(.systemDefined) }
+        let mask: NSEvent.EventTypeMask = capturesModifiersAlone ? [.keyDown, .flagsChanged] : [.keyDown]
         monitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             guard let self else { return event }
-            if event.type == .systemDefined {
-                // Not swallowed either way: a media key isn't a command the dialog would
-                // misread, and letting it through keeps the OS's own handling (actual volume
-                // change, brightness change, ...) working while the dialog is up.
-                if let (keyType, isKeyDown) = decodeMediaKeyEvent(event), isKeyDown {
-                    self.captureMediaKey(keyType)
-                }
-                return event
-            }
             if event.type == .flagsChanged {
                 self.captureModifier(from: event)
                 // Not swallowed: a modifier isn't a command the dialog would misread, and the
@@ -369,12 +304,6 @@ final class KeyCaptureButton: NSButton {
               event.modifierFlags.contains(modifier.flag) else { return }
         stopMonitoring()
         binding = KeyBinding(keyCode: keyCode, label: modifier.label)
-    }
-
-    /// Records a hardware media/function key from its NX_KEYTYPE_* code.
-    private func captureMediaKey(_ keyType: Int32) {
-        stopMonitoring()
-        binding = KeyBinding(mediaKeyType: keyType, label: mediaKeyLabel(for: keyType))
     }
 
     private func finishCapture(with event: NSEvent) {
@@ -422,22 +351,19 @@ func holdKeyTitle(_ binding: KeyBinding?) -> String {
 // MARK: - Hold-key capture dialog
 
 /// Like showCaptureCustomKeypress, but for the key held down for the duration of a button
-/// press. Records a bare modifier too — the intended target is dictation bound to a lone Fn —
-/// and a hardware media/function key (volume, brightness, mute, play/pause, ...), since those
-/// are exactly the keys push-to-talk and similar apps bind to. Returns the recorded binding,
-/// or nil if the dialog was cancelled.
+/// press. Records a bare modifier too — the intended target is dictation bound to a lone Fn.
+/// Returns the recorded binding, or nil if the dialog was cancelled.
 @discardableResult
 func showCaptureHoldKey(current: KeyBinding?) -> KeyBinding? {
     let alert = NSAlert()
     alert.messageText = "Hold Key While Pressed"
-    alert.informativeText = "Click the button below, then press the key to hold for as long as the PowerMate button is held. A modifier on its own works here — press just Fn for push-to-talk dictation. A hardware media/function key (volume, brightness, mute, play/pause) also works.\n\nA short tap still performs the Click action; the hold key engages once the button has been held for 0.2 s. Long press does nothing while a hold key is set."
+    alert.informativeText = "Click the button below, then press the key to hold for as long as the PowerMate button is held. A modifier on its own works here — press just Fn for push-to-talk dictation.\n\nA short tap still performs the Click action; the hold key engages once the button has been held for 0.2 s. Long press does nothing while a hold key is set."
     alert.addButton(withTitle: "Save")
     alert.addButton(withTitle: "Cancel")
 
     let seed = current ?? KeyBinding(keyCode: 0x3F, label: "Fn")
     let button = KeyCaptureButton(binding: seed)
     button.capturesModifiersAlone = true
-    button.capturesMediaKeys = true
     let width: CGFloat = 160
     let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 26))
     button.frame = NSRect(x: (width - 120) / 2, y: 0, width: 120, height: 26)
