@@ -106,6 +106,26 @@ func postKeyUp(_ keyCode: CGKeyCode, flags: CGEventFlags = []) {
     postHeld(keyCode, flags: flags, down: false)
 }
 
+/// Presses `binding`, dispatching to whichever posting primitive its shape needs: a hardware
+/// media/function key (postMediaKey, from AudioControl.swift) or an ordinary/modifier key
+/// (postKeyDown above). Pair every call with `postBindingUp` for the same binding.
+func postBindingDown(_ binding: KeyBinding) {
+    if let keyType = binding.mediaKeyType {
+        postMediaKey(keyType, keyDown: true)
+    } else {
+        postKeyDown(binding.keyCode, flags: binding.flags)
+    }
+}
+
+/// Releases a binding previously pressed with `postBindingDown`.
+func postBindingUp(_ binding: KeyBinding) {
+    if let keyType = binding.mediaKeyType {
+        postMediaKey(keyType, keyDown: false)
+    } else {
+        postKeyUp(binding.keyCode, flags: binding.flags)
+    }
+}
+
 // MARK: - Mouse
 
 /// Convert Cocoa screen point (bottom-left origin) to Quartz (top-left origin).

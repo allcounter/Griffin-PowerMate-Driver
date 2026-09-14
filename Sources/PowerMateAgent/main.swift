@@ -93,7 +93,7 @@ private func armHoldKey(_ binding: KeyBinding) {
     _holdKeyArmWorkItem = nil
     _holdKeySuppressesGestures = true
     _heldKeyBinding = binding
-    postKeyDown(binding.keyCode, flags: binding.flags)
+    postBindingDown(binding)
 }
 
 /// Turns the press in progress from a (pending or armed) hold into a press+turn gesture: the
@@ -114,7 +114,7 @@ func endHoldKey() {
     _holdKeyArmWorkItem = nil
     guard let binding = _heldKeyBinding else { return }
     _heldKeyBinding = nil
-    postKeyUp(binding.keyCode, flags: binding.flags)
+    postBindingUp(binding)
 }
 
 // Keypress Mode modifier-slot debounce: realModifierFlags occasionally still misreads a held

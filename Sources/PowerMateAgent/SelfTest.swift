@@ -4,18 +4,23 @@ import ApplicationServices
 
 // MARK: - Headless self-tests
 //
-// Three verbs that exercise the hold-key primitives without a PowerMate attached and without
+// Verbs that exercise the hold-key primitives without a PowerMate attached and without
 // starting the agent proper. They run before the driver seizes the device or the status item
 // is built, so they work while the normally-installed agent is quit but everything else about
 // the machine (the stored settings blob, the Accessibility grant) is untouched.
 //
-//   PowerMateAgent --selftest-hold <seconds>   press the configured hold key, wait, release
-//   PowerMateAgent --selftest-decode           decode the live settings blob and report holdKey
-//   PowerMateAgent --selftest-overrides        resolve a per-app override against the default
-//                                               and check that holdKey/pressTurnOncePerPress
-//                                               are inherited
+//   PowerMateAgent --selftest-hold <seconds>       press the configured hold key, wait, release
+//   PowerMateAgent --selftest-decode               decode the live settings blob and report holdKey
+//   PowerMateAgent --selftest-overrides            resolve a per-app override against the default
+//                                                   and check that holdKey/pressTurnOncePerPress
+//                                                   are inherited
+//   PowerMateAgent --selftest-mediakey <t> <secs>  post NX_KEYTYPE <t> down, wait, up — proves
+//                                                   the media-key posting path independently of
+//                                                   whether a hold key was successfully recorded
+//                                                   from real hardware (e.g. 0 = Volume Up: this
+//                                                   should visibly raise system volume)
 //
-// All three print what they did and exit 0; anything else returns and startup continues as usual.
+// All print what they did and exit 0; anything else returns and startup continues as usual.
 
 /// Runs a `--selftest-*` verb if one was passed and exits the process. Returns normally when
 /// the agent was launched without one.
@@ -29,6 +34,11 @@ func runSelfTestIfRequested() {
         runDecodeSelfTest()
     case "--selftest-overrides":
         runOverridesSelfTest()
+    case "--selftest-mediakey":
+        runMediaKeySelfTest(
+            keyType: args.dropFirst().first.flatMap { Int32($0) },
+            seconds: args.dropFirst(2).first.flatMap(Double.init) ?? 2
+        )
     default:
         return
     }
@@ -43,16 +53,43 @@ private func runHoldSelfTest(seconds: Double) {
         print("selftest-hold: no hold key configured (defaultAppSettings.holdKey is nil) — nothing to press.")
         exit(1)
     }
-    let isModifier = modifierFlag(forKeyCode: binding.keyCode) != nil
+    let eventType: String
+    if binding.isMediaKey {
+        eventType = ".systemDefined"
+    } else if modifierFlag(forKeyCode: binding.keyCode) != nil {
+        eventType = ".flagsChanged"
+    } else {
+        eventType = ".keyDown/.keyUp"
+    }
     print("selftest-hold: AXIsProcessTrusted=\(AXIsProcessTrusted())")
-    print("selftest-hold: key=\(binding.label) keyCode=0x\(String(binding.keyCode, radix: 16, uppercase: true)) "
-          + "flags=0x\(String(binding.modifierFlags, radix: 16, uppercase: true)) "
-          + "eventType=\(isModifier ? ".flagsChanged" : ".keyDown/.keyUp")")
+    if let keyType = binding.mediaKeyType {
+        print("selftest-hold: key=\(binding.label) mediaKeyType=\(keyType) eventType=\(eventType)")
+    } else {
+        print("selftest-hold: key=\(binding.label) keyCode=0x\(String(binding.keyCode, radix: 16, uppercase: true)) "
+              + "flags=0x\(String(binding.modifierFlags, radix: 16, uppercase: true)) eventType=\(eventType)")
+    }
     print("selftest-hold: DOWN at \(Date())")
-    postKeyDown(binding.keyCode, flags: binding.flags)
+    postBindingDown(binding)
     Thread.sleep(forTimeInterval: seconds)
-    postKeyUp(binding.keyCode, flags: binding.flags)
+    postBindingUp(binding)
     print("selftest-hold: UP at \(Date()) (held \(seconds)s)")
+}
+
+private func runMediaKeySelfTest(keyType: Int32?, seconds: Double) {
+    // Independent of capture and of any stored settings: exercises exactly the same
+    // postMediaKey(_:keyDown:) primitive postBindingDown/Up dispatch to for a hold key
+    // recorded as a media key, so the posting side can be verified even when capturing one
+    // from real hardware (e.g. Fn-row mic/dictation) can't be confirmed without that hardware.
+    guard let keyType else {
+        print("selftest-mediakey: usage: --selftest-mediakey <NX_KEYTYPE> [seconds]  (e.g. 0 = Volume Up, 2 = Brightness Up, 7 = Mute)")
+        exit(1)
+    }
+    print("selftest-mediakey: keyType=\(keyType) (\(mediaKeyLabel(for: keyType)))")
+    print("selftest-mediakey: DOWN at \(Date())")
+    postMediaKey(keyType, keyDown: true)
+    Thread.sleep(forTimeInterval: seconds)
+    postMediaKey(keyType, keyDown: false)
+    print("selftest-mediakey: UP at \(Date()) (held \(seconds)s)")
 }
 
 private func runDecodeSelfTest() {
