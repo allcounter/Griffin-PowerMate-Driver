@@ -84,26 +84,26 @@ func frontmostBundleID() -> String? {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
 
-/// Resolves an override against the base, inheriting `holdKey` and `pressTurnOncePerPress`
-/// from the base unconditionally.
+/// Resolves an override against the base. An override, once it exists, is a complete and
+/// independent snapshot — every field is whatever was explicitly set for that app (or the
+/// compiled-in AppSettings() default, for a field its own UI never touched), never inherited
+/// from the global default. holdKey follows that same rule now that it has a per-app control
+/// (the Long press pop-up's "Hold Key While Pressed..." item, in AppOverridesWindow.swift).
 ///
-/// Neither field has a per-app control in `AppOverridesWindow.swift` yet, so an override can
-/// only ever carry the zero value for them and there is nothing per-app worth preserving —
-/// silently keeping the override's zero value would make a per-app override quietly kill the
-/// hold key and the flick setting instead of inheriting them. When such a control is added,
-/// these should become nil-fallbacks (take from base only where the override has not set them)
-/// rather than unconditional assignments.
+/// pressTurnOncePerPress is the one exception: it still has no per-app control anywhere, so
+/// an override's copy of it can only ever be the compiled-in `false` — unlike every other
+/// field, there is no UI path that could make that value mean anything for a specific app.
+/// Inheriting it from the base is what makes the setting keep working globally once *any* app
+/// has an override; give it a real per-app control before removing this special case.
 func resolvedSettings(override: AppSettings?, base: AppSettings) -> AppSettings {
     guard let override = override else { return base }
     var resolved = override
-    resolved.holdKey = base.holdKey
     resolved.pressTurnOncePerPress = base.pressTurnOncePerPress
     return resolved
 }
 
 /// The effective settings for whatever app is currently frontmost: its override if one is
-/// configured, otherwise the global default. The hold key and the once-per-press flick are
-/// always inherited from the default, since neither is per-app configurable yet.
+/// configured, otherwise the global default.
 func currentSettings() -> AppSettings {
     guard let bundleID = frontmostBundleID() else { return defaultSettings }
     return resolvedSettings(override: perAppSettings[bundleID], base: defaultSettings)

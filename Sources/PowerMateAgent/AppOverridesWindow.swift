@@ -45,6 +45,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
     private let longPressPopup = NSPopUpButton()
     private var longPressMenuItems: [NSMenuItem] = []
     private var longPressCustomMenuItem: NSMenuItem!
+    private var holdKeyMenuItem: NSMenuItem!
 
     // Only shown when this app's long press is set to "Run Script" — lets this app run a
     // different script than the global default (set via the main "Configure Scripts...").
@@ -241,6 +242,14 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         menu.addItem(.separator())
         addLongPressItem("Toggle fine/coarse scrolling", .toggleFineScroll, to: menu)
         addLongPressItem("Run Script", .runScript, to: menu)
+        menu.addItem(.separator())
+        // Hold Key isn't a LongPressAction case -- it's the separate, independent holdKey
+        // field on AppSettings, since it preempts Long press entirely rather than being one
+        // more thing Long press can do. No representedObject; longPressChanged and the
+        // selection-restore logic in updateDetailPane identify this item by reference instead.
+        let holdKey = NSMenuItem(title: "Hold Key While Pressed...", action: nil, keyEquivalent: "")
+        menu.addItem(holdKey)
+        holdKeyMenuItem = holdKey
         let custom = NSMenuItem(title: "Custom Keypress...", action: nil, keyEquivalent: "")
         // Placeholder binding: selecting this item always opens the capture dialog (see
         // longPressChanged), which replaces it with the actually-recorded key before saving.
@@ -436,7 +445,12 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         longPressLabel.isHidden = false
         longPressPopup.isHidden = false
         longPressCustomMenuItem.title = customKeypressTitle(settings.longPressAction.customBinding)
-        if case .custom = settings.longPressAction {
+        holdKeyMenuItem.title = holdKeyTitle(settings.holdKey)
+        if settings.holdKey != nil {
+            // Takes priority over longPressAction: a hold key preempts Long press entirely,
+            // same as the status-bar menu, so it's what should show selected here too.
+            longPressPopup.select(holdKeyMenuItem)
+        } else if case .custom = settings.longPressAction {
             longPressPopup.select(longPressCustomMenuItem)
         } else if let match = longPressMenuItems.first(where: { ($0.representedObject as? LongPressAction) == settings.longPressAction }) {
             longPressPopup.select(match)
@@ -503,8 +517,18 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
     }
 
     @objc private func longPressChanged() {
-        guard let bundleID = selectedBundleID(),
-              let action = longPressPopup.selectedItem?.representedObject as? LongPressAction else { return }
+        guard let bundleID = selectedBundleID() else { return }
+        if longPressPopup.selectedItem === holdKeyMenuItem {
+            guard let binding = showCaptureHoldKey(current: perAppSettings[bundleID]?.holdKey) else {
+                updateDetailPane()
+                return
+            }
+            perAppSettings[bundleID]?.holdKey = binding
+            savePerAppSettings()
+            updateDetailPane()
+            return
+        }
+        guard let action = longPressPopup.selectedItem?.representedObject as? LongPressAction else { return }
         if case .custom = action {
             guard let binding = showCaptureCustomKeypress(current: perAppSettings[bundleID]?.longPressAction.customBinding) else {
                 updateDetailPane()
@@ -514,6 +538,10 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         } else {
             perAppSettings[bundleID]?.longPressAction = action
         }
+        // Choosing an actual Long-press action means Hold Key isn't in effect anymore for
+        // this app -- clears it so its selection state doesn't linger (mirrors the
+        // status-bar menu's setLongPressAction).
+        perAppSettings[bundleID]?.holdKey = nil
         savePerAppSettings()
         updateDetailPane()
     }
