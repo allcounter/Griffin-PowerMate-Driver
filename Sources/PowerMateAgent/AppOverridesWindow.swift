@@ -222,12 +222,12 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         contentView.addSubview(pressTurnOnceCheck)
 
         // Instructions (always visible — a quick reminder of how mode + long press interact).
-        let instructionsSeparator = NSBox(frame: NSRect(x: rightX, y: 142, width: rightW, height: 1))
+        let instructionsSeparator = NSBox(frame: NSRect(x: rightX, y: 138, width: rightW, height: 1))
         instructionsSeparator.boxType = .separator
         instructionsSeparator.autoresizingMask = [.width]
         contentView.addSubview(instructionsSeparator)
 
-        instructionsLabel.frame = NSRect(x: rightX, y: 16, width: rightW, height: 118)
+        instructionsLabel.frame = NSRect(x: rightX, y: 16, width: rightW, height: 114)
         instructionsLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         instructionsLabel.textColor = .secondaryLabelColor
         instructionsLabel.autoresizingMask = [.width]
@@ -398,9 +398,12 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         setKeypressControlsHidden(mode != .keypress)
     }
 
-    /// Shown exactly where main.swift's rotation handler would send the Press + Turn key.
+    /// Shown exactly where main.swift's rotation handler would send the Press + Turn key. Takes
+    /// the Configure Script row when that button is hidden, so it sits directly under the Long
+    /// press pop-up instead of floating just above the instructions separator.
     private func updatePressTurnOnceVisibility(_ settings: AppSettings) {
         pressTurnOnceCheck.isHidden = !(settings.mode == .keypress || settings.holdKey != nil)
+        pressTurnOnceCheck.frame.origin.y = configureScriptButton.isHidden ? 176 : 146
     }
 
     private func updateDetailPane() {
