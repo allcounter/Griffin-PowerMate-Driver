@@ -157,6 +157,11 @@ extension LongPressAction {
         if case .custom(let binding) = self { return binding }
         return nil
     }
+
+    var togglePair: ModeTogglePair? {
+        if case .toggleMode(let pair) = self { return pair }
+        return nil
+    }
 }
 
 // MARK: - Per-app-capable settings

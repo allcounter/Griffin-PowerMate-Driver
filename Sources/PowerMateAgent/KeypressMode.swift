@@ -243,6 +243,41 @@ private let modifierOnlyKeys: [CGKeyCode: (flag: NSEvent.ModifierFlags, label: S
     0x3F: (.function, "Fn"),
 ]
 
+// MARK: - Bare-modifier chord disambiguation
+//
+// A modifier's press transition alone doesn't say whether the gesture is "hold this modifier
+// alone" or "hold this modifier, then press a real key" (e.g. Control-Option-F). Only later
+// disambiguates it: the modifier's own release with nothing else pressed in between means
+// "alone"; a real key arriving first means the modifier was just a prefix, and that key wins
+// instead.
+//
+// Deliberately kept free of NSEvent/AppKit so --selftest-capture can drive it with plain values
+// and assert the outcome without a running run loop or real keyboard — local monitors don't fire
+// for programmatically posted events without one, which made the equivalent logic untestable
+// before this was pulled out.
+struct ModifierCaptureState {
+    private(set) var pending: (keyCode: CGKeyCode, label: String)?
+
+    /// Call for every .flagsChanged transition of a code present in `modifierOnlyKeys`. Returns
+    /// the binding to finalize with on a release-with-nothing-else-pressed, else nil to keep
+    /// waiting (including every press transition, which only ever records the candidate).
+    mutating func handleModifierTransition(keyCode: CGKeyCode, label: String, isDown: Bool) -> KeyBinding? {
+        if isDown {
+            pending = (keyCode, label)
+            return nil
+        }
+        guard pending?.keyCode == keyCode else { return nil }
+        pending = nil
+        return KeyBinding(keyCode: keyCode, label: label)
+    }
+
+    /// Call when a real key arrives: whatever modifier was pending was a prefix, not a
+    /// bare-modifier gesture, so drop the candidate without producing a binding for it.
+    mutating func interruptWithRealKey() {
+        pending = nil
+    }
+}
+
 // MARK: - Key capture control
 
 /// A push button that, when clicked, records the next key pressed anywhere in the app and
@@ -261,6 +296,7 @@ final class KeyCaptureButton: NSButton {
     var capturesModifiersAlone = false
 
     private var monitor: Any?
+    private var modifierState = ModifierCaptureState()
 
     init(binding: KeyBinding) {
         self.binding = binding
@@ -281,29 +317,39 @@ final class KeyCaptureButton: NSButton {
         KeyCaptureButton.activeCapture?.cancelCapture()
         KeyCaptureButton.activeCapture = self
         title = "Press a key…"
+        modifierState = ModifierCaptureState()
         let mask: NSEvent.EventTypeMask = capturesModifiersAlone ? [.keyDown, .flagsChanged] : [.keyDown]
         monitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            guard let self else { return event }
-            if event.type == .flagsChanged {
-                self.captureModifier(from: event)
-                // Not swallowed: a modifier isn't a command the dialog would misread, and the
-                // release transition still has to reach anything else tracking modifier state.
-                return event
-            }
-            self.finishCapture(with: event)
-            return nil // swallow so it doesn't also trigger e.g. Esc-cancels-the-alert
+            self?.processCaptureEvent(event) ?? event
         }
     }
 
-    /// Records a bare modifier from a `.flagsChanged` event. Only the press transition counts:
-    /// the same key code arrives again on release with its flag cleared, and letting that
-    /// through would overwrite the binding a moment after recording it.
-    private func captureModifier(from event: NSEvent) {
+    /// The actual capture decision for one event: which kind it is, and what to do about it.
+    /// Pulled out of the monitor closure so --selftest-capture-button can drive it directly with
+    /// synthetic NSEvents built via NSEvent.keyEvent(with:...) — local monitors themselves only
+    /// fire for genuinely-dispatched events, which makes the closure itself unreachable from a
+    /// headless self-test with no run loop pumping real input.
+    func processCaptureEvent(_ event: NSEvent) -> NSEvent? {
+        if event.type == .flagsChanged {
+            handleModifierTransition(event)
+            // Not swallowed: a modifier isn't a command the dialog would misread, and the
+            // release transition still has to reach anything else tracking modifier state.
+            return event
+        }
+        modifierState.interruptWithRealKey()
+        finishCapture(with: event)
+        return nil // swallow so it doesn't also trigger e.g. Esc-cancels-the-alert
+    }
+
+    /// Feeds a `.flagsChanged` event to the modifier-chord state machine, finalizing the
+    /// binding if it resolves one (a release with nothing pressed in between).
+    private func handleModifierTransition(_ event: NSEvent) {
         let keyCode = CGKeyCode(event.keyCode)
-        guard let modifier = modifierOnlyKeys[keyCode],
-              event.modifierFlags.contains(modifier.flag) else { return }
+        guard let modifier = modifierOnlyKeys[keyCode] else { return }
+        let isDown = event.modifierFlags.contains(modifier.flag)
+        guard let finalized = modifierState.handleModifierTransition(keyCode: keyCode, label: modifier.label, isDown: isDown) else { return }
         stopMonitoring()
-        binding = KeyBinding(keyCode: keyCode, label: modifier.label)
+        binding = finalized
     }
 
     private func finishCapture(with event: NSEvent) {
@@ -357,7 +403,7 @@ func holdKeyTitle(_ binding: KeyBinding?) -> String {
 func showCaptureHoldKey(current: KeyBinding?) -> KeyBinding? {
     let alert = NSAlert()
     alert.messageText = "Hold Key While Pressed"
-    alert.informativeText = "Click the button below, then press the key to hold for as long as the PowerMate button is held. A modifier on its own works here — press just Fn for push-to-talk dictation.\n\nA short tap still performs the Click action; the hold key engages once the button has been held for 0.2 s. Long press does nothing while a hold key is set."
+    alert.informativeText = "Click the button below, then press the key to hold for as long as the PowerMate button is held. A modifier alone works too — press just Fn for push-to-talk dictation. A short tap still performs the Click action; Long press does nothing while a hold key is set."
     alert.addButton(withTitle: "Save")
     alert.addButton(withTitle: "Cancel")
 
