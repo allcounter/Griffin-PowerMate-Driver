@@ -12,8 +12,10 @@ import ApplicationServices
 //   PowerMateAgent --selftest-hold <seconds>       press the configured hold key, wait, release
 //   PowerMateAgent --selftest-decode               decode the live settings blob and report holdKey
 //   PowerMateAgent --selftest-overrides            resolve a per-app override against the default
-//                                                   and check that holdKey/pressTurnOncePerPress
-//                                                   are inherited
+//                                                   and check that an override's own holdKey,
+//                                                   pressTurnOncePerPress and mode survive
+//                                                   resolution, and that a nil override returns
+//                                                   the default
 //   PowerMateAgent --selftest-capture              exercises ModifierCaptureState (the bare-
 //                                                   modifier-vs-prefix disambiguation behind the
 //                                                   hold-key capture dialog) against synthetic
@@ -235,7 +237,7 @@ private func runDecodeSelfTest() {
 private func runOverridesSelfTest() {
     // Constructed entirely in memory — no `defaults` or `NSWorkspace` reads. That's the point
     // of extracting resolvedSettings(override:base:) as a pure function: this verb can prove
-    // the inheritance rule from a bare `swift build` binary, where --selftest-decode and
+    // the ownership rule from a bare `swift build` binary, where --selftest-decode and
     // --selftest-hold legitimately cannot (they depend on the installed app's UserDefaults
     // domain).
     var base = AppSettings()
@@ -248,6 +250,9 @@ private func runOverridesSelfTest() {
     // Deliberately different from base.holdKey, to prove the override's own value survives
     // rather than being silently replaced by the base's.
     override.holdKey = KeyBinding(keyCode: 0x38, label: "Shift")
+    // Deliberately different from base.pressTurnOncePerPress (true), the same shape as the
+    // stored Safari override.
+    override.pressTurnOncePerPress = false
 
     var anyFailed = false
 
@@ -260,16 +265,29 @@ private func runOverridesSelfTest() {
         }
     }
 
-    // Test 1: holdKey has its own per-app control now (the Long press pop-up in
-    // AppOverridesWindow.swift), so it follows the same independent-snapshot rule as every
-    // other AppSettings field — the override's own value must survive, not the base's.
-    // pressTurnOncePerPress is still the one field forced to inherit, since it has no per-app
-    // control yet (see resolvedSettings' doc comment).
+    // Test 1: every field, holdKey and pressTurnOncePerPress included, follows the
+    // independent-snapshot rule now that each has a per-app control — the override's own
+    // value must survive, not the base's.
     let resolved1 = resolvedSettings(override: override, base: base)
     check("override-owned holdKey preserved", resolved1.holdKey == override.holdKey,
           expected: "\(String(describing: override.holdKey))", actualDescription: "\(String(describing: resolved1.holdKey))")
-    check("inherited pressTurnOncePerPress", resolved1.pressTurnOncePerPress == base.pressTurnOncePerPress,
-          expected: "\(base.pressTurnOncePerPress)", actualDescription: "\(resolved1.pressTurnOncePerPress)")
+    check("override-owned pressTurnOncePerPress preserved (override false, base true)",
+          resolved1.pressTurnOncePerPress == override.pressTurnOncePerPress,
+          expected: "\(override.pressTurnOncePerPress)", actualDescription: "\(resolved1.pressTurnOncePerPress)")
+
+    // Test 1b: the reverse pair, from copies with the flag values swapped. This rules out an
+    // implementation that merely resets the field to the compiled-in default, which the case
+    // above alone cannot distinguish from override-ownership.
+    do {
+        var base2 = base
+        base2.pressTurnOncePerPress = false
+        var override2 = override
+        override2.pressTurnOncePerPress = true
+        let resolved1b = resolvedSettings(override: override2, base: base2)
+        check("override-owned pressTurnOncePerPress preserved (override true, base false)",
+              resolved1b.pressTurnOncePerPress == override2.pressTurnOncePerPress,
+              expected: "\(override2.pressTurnOncePerPress)", actualDescription: "\(resolved1b.pressTurnOncePerPress)")
+    }
 
     // Test 2: a field the override genuinely owns (mode) is still respected — the base must
     // not clobber it.
