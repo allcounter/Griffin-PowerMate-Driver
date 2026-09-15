@@ -51,6 +51,11 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
     // different script than the global default (set via the main "Configure Scripts...").
     private let configureScriptButton = NSButton(title: "Configure Script...", target: nil, action: nil)
 
+    // Only shown where Press + Turn actually sends a key: Keypress mode, or any mode once this
+    // app has a hold key (the same condition main.swift's rotation handler uses). The title
+    // matches the status-bar menu item, so the docs name one control.
+    private let pressTurnOnceCheck = NSButton(checkboxWithTitle: "Press + Turn Fires Once Per Press", target: nil, action: nil)
+
     private let instructionsLabel = NSTextField(wrappingLabelWithString: "")
     private let noSelectionInstructions =
         "Add an app with the + button, or select one from the list, to configure its mode " +
@@ -210,13 +215,19 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         configureScriptButton.action = #selector(configureAppScript)
         contentView.addSubview(configureScriptButton)
 
+        // Only visible where Press + Turn sends a key; see updatePressTurnOnceVisibility.
+        pressTurnOnceCheck.frame = NSRect(x: rightX, y: 146, width: rightW, height: 20)
+        pressTurnOnceCheck.target = self
+        pressTurnOnceCheck.action = #selector(settingChanged)
+        contentView.addSubview(pressTurnOnceCheck)
+
         // Instructions (always visible — a quick reminder of how mode + long press interact).
-        let instructionsSeparator = NSBox(frame: NSRect(x: rightX, y: 170, width: rightW, height: 1))
+        let instructionsSeparator = NSBox(frame: NSRect(x: rightX, y: 142, width: rightW, height: 1))
         instructionsSeparator.boxType = .separator
         instructionsSeparator.autoresizingMask = [.width]
         contentView.addSubview(instructionsSeparator)
 
-        instructionsLabel.frame = NSRect(x: rightX, y: 16, width: rightW, height: 146)
+        instructionsLabel.frame = NSRect(x: rightX, y: 16, width: rightW, height: 118)
         instructionsLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         instructionsLabel.textColor = .secondaryLabelColor
         instructionsLabel.autoresizingMask = [.width]
@@ -387,6 +398,11 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         setKeypressControlsHidden(mode != .keypress)
     }
 
+    /// Shown exactly where main.swift's rotation handler would send the Press + Turn key.
+    private func updatePressTurnOnceVisibility(_ settings: AppSettings) {
+        pressTurnOnceCheck.isHidden = !(settings.mode == .keypress || settings.holdKey != nil)
+    }
+
     private func updateDetailPane() {
         guard let bundleID = selectedBundleID(), let settings = perAppSettings[bundleID] else {
             appNameLabel.stringValue = "Select an app, or click + to add one."
@@ -402,6 +418,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
             longPressLabel.isHidden = true
             longPressPopup.isHidden = true
             configureScriptButton.isHidden = true
+            pressTurnOnceCheck.isHidden = true
             instructionsLabel.stringValue = noSelectionInstructions
             return
         }
@@ -413,6 +430,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         fineScrollCheck.state        = settings.fineScrollEnabled ? .on : .off
         scrollAxesSwappedCheck.state = settings.scrollAxesSwapped ? .on : .off
         audioStepSwappedCheck.state  = settings.audioStepSwapped ? .on : .off
+        pressTurnOnceCheck.state     = settings.pressTurnOncePerPress ? .on : .off
         updateModeSpecificVisibility(settings.mode)
 
         clickActionLabel.isHidden = false
@@ -459,6 +477,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         configureScriptButton.title = (settings.script1 != nil || settings.script2 != nil)
             ? "Configure Script... (Custom)"
             : "Configure Script... (Default)"
+        updatePressTurnOnceVisibility(settings)
 
         instructionsLabel.stringValue = selectedAppInstructions
     }
@@ -471,6 +490,9 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         perAppSettings[bundleID]?.mode = mode
         savePerAppSettings()
         updateModeSpecificVisibility(mode)
+        if let settings = perAppSettings[bundleID] {
+            updatePressTurnOnceVisibility(settings)
+        }
     }
 
     @objc private func settingChanged() {
@@ -479,6 +501,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         perAppSettings[bundleID]?.fineScrollEnabled = fineScrollCheck.state == .on
         perAppSettings[bundleID]?.scrollAxesSwapped = scrollAxesSwappedCheck.state == .on
         perAppSettings[bundleID]?.audioStepSwapped  = audioStepSwappedCheck.state == .on
+        perAppSettings[bundleID]?.pressTurnOncePerPress = pressTurnOnceCheck.state == .on
         savePerAppSettings()
     }
 
