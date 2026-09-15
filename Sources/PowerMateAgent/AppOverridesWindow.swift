@@ -46,6 +46,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
     private var longPressMenuItems: [NSMenuItem] = []
     private var longPressCustomMenuItem: NSMenuItem!
     private var holdKeyMenuItem: NSMenuItem!
+    private let pressTurnOnceCheck = NSButton(checkboxWithTitle: "Press + Turn Fires Once Per Press", target: nil, action: nil)
 
     // Only shown when this app's long press is set to "Run Script" — lets this app run a
     // different script than the global default (set via the main "Configure Scripts...").
@@ -64,13 +65,13 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 592),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Configure Applications for PowerMate"
-        window.minSize = NSSize(width: 540, height: 480)
+        window.minSize = NSSize(width: 540, height: 512)
         window.center()
         self.init(window: window)
         window.delegate = self
@@ -117,14 +118,14 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         let rightW: CGFloat = 392
 
         appNameLabel.font  = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
-        appNameLabel.frame = NSRect(x: rightX, y: 525, width: rightW, height: 20)
+        appNameLabel.frame = NSRect(x: rightX, y: 557, width: rightW, height: 20)
         appNameLabel.autoresizingMask = [.width]
         contentView.addSubview(appNameLabel)
 
-        modeLabel.frame = NSRect(x: rightX, y: 487, width: 44, height: 24)
+        modeLabel.frame = NSRect(x: rightX, y: 519, width: 44, height: 24)
         contentView.addSubview(modeLabel)
 
-        modePopup.frame = NSRect(x: rightX + 48, y: 485, width: 150, height: 26)
+        modePopup.frame = NSRect(x: rightX + 48, y: 517, width: 150, height: 26)
         for mode in RotationMode.allCases {
             modePopup.addItem(withTitle: title(for: mode))
         }
@@ -132,15 +133,15 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         modePopup.action = #selector(modeChanged)
         contentView.addSubview(modePopup)
 
-        let separator = NSBox(frame: NSRect(x: rightX, y: 472, width: rightW, height: 1))
+        let separator = NSBox(frame: NSRect(x: rightX, y: 504, width: rightW, height: 1))
         separator.boxType = .separator
         separator.autoresizingMask = [.width]
         contentView.addSubview(separator)
 
         // Scroll-mode controls.
-        scrollReversedCheck.frame    = NSRect(x: rightX, y: 434, width: rightW, height: 20)
-        fineScrollCheck.frame        = NSRect(x: rightX, y: 406, width: rightW, height: 20)
-        scrollAxesSwappedCheck.frame = NSRect(x: rightX, y: 378, width: rightW, height: 20)
+        scrollReversedCheck.frame    = NSRect(x: rightX, y: 466, width: rightW, height: 20)
+        fineScrollCheck.frame        = NSRect(x: rightX, y: 438, width: rightW, height: 20)
+        scrollAxesSwappedCheck.frame = NSRect(x: rightX, y: 410, width: rightW, height: 20)
         for c in [scrollReversedCheck, fineScrollCheck, scrollAxesSwappedCheck] {
             c.target = self
             c.action = #selector(settingChanged)
@@ -149,19 +150,19 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
 
         // Audio-mode controls. (Click is no longer audio-specific — see the always-visible
         // Click/Double-click section below.)
-        audioStepSwappedCheck.frame = NSRect(x: rightX, y: 434, width: rightW, height: 20)
+        audioStepSwappedCheck.frame = NSRect(x: rightX, y: 466, width: rightW, height: 20)
         audioStepSwappedCheck.target = self
         audioStepSwappedCheck.action = #selector(settingChanged)
         contentView.addSubview(audioStepSwappedCheck)
 
         // Keypress-mode controls.
-        configureKeysButton.frame  = NSRect(x: rightX, y: 434, width: 150, height: 24)
+        configureKeysButton.frame  = NSRect(x: rightX, y: 466, width: 150, height: 24)
         configureKeysButton.target = self
         configureKeysButton.action = #selector(configureKeys)
         contentView.addSubview(configureKeysButton)
 
         // Click/Double-click (always visible, independent of mode).
-        let clickActionsSeparator = NSBox(frame: NSRect(x: rightX, y: 357, width: rightW, height: 1))
+        let clickActionsSeparator = NSBox(frame: NSRect(x: rightX, y: 389, width: rightW, height: 1))
         clickActionsSeparator.boxType = .separator
         clickActionsSeparator.autoresizingMask = [.width]
         contentView.addSubview(clickActionsSeparator)
@@ -169,40 +170,48 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         let clickLabelWidth: CGFloat = 100
         let clickPopupX = rightX + clickLabelWidth + 8
 
-        clickActionLabel.frame = NSRect(x: rightX, y: 319, width: clickLabelWidth, height: 24)
+        clickActionLabel.frame = NSRect(x: rightX, y: 351, width: clickLabelWidth, height: 24)
         contentView.addSubview(clickActionLabel)
 
-        clickActionPopup.frame = NSRect(x: clickPopupX, y: 317, width: rightX + rightW - clickPopupX, height: 26)
+        clickActionPopup.frame = NSRect(x: clickPopupX, y: 349, width: rightX + rightW - clickPopupX, height: 26)
         clickActionPopup.menu = buildClickActionMenu()
         clickActionPopup.target = self
         clickActionPopup.action = #selector(clickActionChanged)
         contentView.addSubview(clickActionPopup)
 
-        doubleClickActionLabel.frame = NSRect(x: rightX, y: 283, width: clickLabelWidth, height: 24)
+        doubleClickActionLabel.frame = NSRect(x: rightX, y: 315, width: clickLabelWidth, height: 24)
         contentView.addSubview(doubleClickActionLabel)
 
-        doubleClickActionPopup.frame = NSRect(x: clickPopupX, y: 281, width: rightX + rightW - clickPopupX, height: 26)
+        doubleClickActionPopup.frame = NSRect(x: clickPopupX, y: 313, width: rightX + rightW - clickPopupX, height: 26)
         doubleClickActionPopup.menu = buildDoubleClickActionMenu()
         doubleClickActionPopup.target = self
         doubleClickActionPopup.action = #selector(doubleClickActionChanged)
         contentView.addSubview(doubleClickActionPopup)
 
         // Long press (always visible, independent of mode).
-        let longPressSeparator = NSBox(frame: NSRect(x: rightX, y: 266, width: rightW, height: 1))
+        let longPressSeparator = NSBox(frame: NSRect(x: rightX, y: 298, width: rightW, height: 1))
         longPressSeparator.boxType = .separator
         longPressSeparator.autoresizingMask = [.width]
         contentView.addSubview(longPressSeparator)
 
-        longPressLabel.frame = NSRect(x: rightX, y: 232, width: 80, height: 24)
+        longPressLabel.frame = NSRect(x: rightX, y: 264, width: 80, height: 24)
         contentView.addSubview(longPressLabel)
 
-        longPressPopup.frame = NSRect(x: rightX, y: 202, width: rightW, height: 26)
+        longPressPopup.frame = NSRect(x: rightX, y: 234, width: rightW, height: 26)
         longPressPopup.menu = buildLongPressMenu()
         // Target/action on the button itself (not on individual items) so NSPopUpButton's
         // own selection tracking updates the displayed title — same pattern as modePopup.
         longPressPopup.target = self
         longPressPopup.action = #selector(longPressChanged)
         contentView.addSubview(longPressPopup)
+
+        // Applies to the Press + Turn gesture wherever it sends a key (Keypress mode, or any
+        // mode once a hold key is set) — not mode-specific, so grouped with the other
+        // always-visible controls rather than hidden per-mode like the ones above.
+        pressTurnOnceCheck.frame = NSRect(x: rightX, y: 204, width: rightW, height: 20)
+        pressTurnOnceCheck.target = self
+        pressTurnOnceCheck.action = #selector(settingChanged)
+        contentView.addSubview(pressTurnOnceCheck)
 
         // Only visible when this app's long press is "Run Script" — see updateDetailPane.
         configureScriptButton.frame = NSRect(x: rightX, y: 174, width: 220, height: 24)
@@ -401,6 +410,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
             doubleClickActionPopup.isHidden = true
             longPressLabel.isHidden = true
             longPressPopup.isHidden = true
+            pressTurnOnceCheck.isHidden = true
             configureScriptButton.isHidden = true
             instructionsLabel.stringValue = noSelectionInstructions
             return
@@ -455,6 +465,8 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         } else if let match = longPressMenuItems.first(where: { ($0.representedObject as? LongPressAction) == settings.longPressAction }) {
             longPressPopup.select(match)
         }
+        pressTurnOnceCheck.isHidden = false
+        pressTurnOnceCheck.state = settings.pressTurnOncePerPress ? .on : .off
         configureScriptButton.isHidden = settings.longPressAction != .runScript
         configureScriptButton.title = (settings.script1 != nil || settings.script2 != nil)
             ? "Configure Script... (Custom)"
@@ -479,6 +491,7 @@ final class AppOverridesWindowController: NSWindowController, NSWindowDelegate, 
         perAppSettings[bundleID]?.fineScrollEnabled = fineScrollCheck.state == .on
         perAppSettings[bundleID]?.scrollAxesSwapped = scrollAxesSwappedCheck.state == .on
         perAppSettings[bundleID]?.audioStepSwapped  = audioStepSwappedCheck.state == .on
+        perAppSettings[bundleID]?.pressTurnOncePerPress = pressTurnOnceCheck.state == .on
         savePerAppSettings()
     }
 

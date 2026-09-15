@@ -235,8 +235,8 @@ private func runDecodeSelfTest() {
 private func runOverridesSelfTest() {
     // Constructed entirely in memory — no `defaults` or `NSWorkspace` reads. That's the point
     // of extracting resolvedSettings(override:base:) as a pure function: this verb can prove
-    // the inheritance rule from a bare `swift build` binary, where --selftest-decode and
-    // --selftest-hold legitimately cannot (they depend on the installed app's UserDefaults
+    // the independent-snapshot rule from a bare `swift build` binary, where --selftest-decode
+    // and --selftest-hold legitimately cannot (they depend on the installed app's UserDefaults
     // domain).
     var base = AppSettings()
     base.holdKey = KeyBinding(keyCode: 0x3F, label: "Fn")
@@ -245,9 +245,10 @@ private func runOverridesSelfTest() {
 
     var override = AppSettings()
     override.mode = .keypress
-    // Deliberately different from base.holdKey, to prove the override's own value survives
+    // Deliberately different from base's values, to prove the override's own values survive
     // rather than being silently replaced by the base's.
     override.holdKey = KeyBinding(keyCode: 0x38, label: "Shift")
+    override.pressTurnOncePerPress = false
 
     var anyFailed = false
 
@@ -260,16 +261,16 @@ private func runOverridesSelfTest() {
         }
     }
 
-    // Test 1: holdKey has its own per-app control now (the Long press pop-up in
-    // AppOverridesWindow.swift), so it follows the same independent-snapshot rule as every
-    // other AppSettings field — the override's own value must survive, not the base's.
-    // pressTurnOncePerPress is still the one field forced to inherit, since it has no per-app
-    // control yet (see resolvedSettings' doc comment).
+    // Test 1: holdKey and pressTurnOncePerPress each have their own per-app control now (the
+    // Long press pop-up's "Hold Key While Pressed..." item and "Press + Turn Fires Once Per
+    // Press" checkbox, in AppOverridesWindow.swift), so both follow the same
+    // independent-snapshot rule as every other AppSettings field — the override's own values
+    // must survive, not the base's.
     let resolved1 = resolvedSettings(override: override, base: base)
     check("override-owned holdKey preserved", resolved1.holdKey == override.holdKey,
           expected: "\(String(describing: override.holdKey))", actualDescription: "\(String(describing: resolved1.holdKey))")
-    check("inherited pressTurnOncePerPress", resolved1.pressTurnOncePerPress == base.pressTurnOncePerPress,
-          expected: "\(base.pressTurnOncePerPress)", actualDescription: "\(resolved1.pressTurnOncePerPress)")
+    check("override-owned pressTurnOncePerPress preserved", resolved1.pressTurnOncePerPress == override.pressTurnOncePerPress,
+          expected: "\(override.pressTurnOncePerPress)", actualDescription: "\(resolved1.pressTurnOncePerPress)")
 
     // Test 2: a field the override genuinely owns (mode) is still respected — the base must
     // not clobber it.

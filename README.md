@@ -257,7 +257,7 @@ Posting events may require **Input Monitoring** (or **Accessibility**) in **Syst
 
 **Hold key**: a new push-to-talk action. Configure a key (including a bare modifier such as Fn) via **Long press** → **Hold Key While Pressed...**, and it's held down for exactly as long as the PowerMate button is held. A short tap still resolves as Click (or Double-click, if configured); the key engages after a roughly 0.2 s arming delay, or immediately when Click and Double-click are both None. Setting a hold key takes over Long press, since a long press is itself a hold, and Press + Turn sends the Keypress-mode "Press + Turn" key in every mode instead of skipping tracks, cancelling the hold so you can step through just-dictated text. Configurable per app in **Configure Applications...**, same as the other Long press options — choosing a different Long press action for an app clears its hold key.
 
-**Press + Turn Fires Once Per Press**: an option for the Press + Turn gesture (Keypress mode, or any mode once a hold key is set) that turns it into a flick — hold the button, one nudge left or right, release, one keypress — instead of repeating the key once per detent. Useful for toggling something such as a quick-note window, which repeating would undo.
+**Press + Turn Fires Once Per Press**: an option for the Press + Turn gesture (Keypress mode, or any mode once a hold key is set) that turns it into a flick — hold the button, one nudge left or right, release, one keypress — instead of repeating the key once per detent. Useful for toggling something such as a quick-note window, which repeating would undo. Configurable per app in **Configure Applications...**, alongside Long press.
 
 #### 1.0.19
 

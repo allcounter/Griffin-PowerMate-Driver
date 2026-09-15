@@ -85,21 +85,16 @@ func frontmostBundleID() -> String? {
 }
 
 /// Resolves an override against the base. An override, once it exists, is a complete and
-/// independent snapshot — every field is whatever was explicitly set for that app (or the
-/// compiled-in AppSettings() default, for a field its own UI never touched), never inherited
-/// from the global default. holdKey follows that same rule now that it has a per-app control
-/// (the Long press pop-up's "Hold Key While Pressed..." item, in AppOverridesWindow.swift).
-///
-/// pressTurnOncePerPress is the one exception: it still has no per-app control anywhere, so
-/// an override's copy of it can only ever be the compiled-in `false` — unlike every other
-/// field, there is no UI path that could make that value mean anything for a specific app.
-/// Inheriting it from the base is what makes the setting keep working globally once *any* app
-/// has an override; give it a real per-app control before removing this special case.
+/// independent snapshot — every field is whatever was explicitly set for that app, never
+/// inherited from the global default. holdKey and pressTurnOncePerPress both follow this rule
+/// now that each has a real per-app control (the Long press pop-up's "Hold Key While
+/// Pressed..." item and "Press + Turn Fires Once Per Press" checkbox, in
+/// AppOverridesWindow.swift) — no field currently needs special-casing here. If a future field
+/// is added without a per-app control of its own, and should keep following the global default
+/// regardless, that's where such a case would go: fall back to `base`'s value only for that
+/// field, right before returning.
 func resolvedSettings(override: AppSettings?, base: AppSettings) -> AppSettings {
-    guard let override = override else { return base }
-    var resolved = override
-    resolved.pressTurnOncePerPress = base.pressTurnOncePerPress
-    return resolved
+    override ?? base
 }
 
 /// The effective settings for whatever app is currently frontmost: its override if one is
